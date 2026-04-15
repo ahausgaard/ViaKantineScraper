@@ -2,6 +2,8 @@ import azure.functions as func
 import logging
 import os
 import requests
+import re
+from datetime import datetime, timedelta
 from apify_client import ApifyClient
 from azure.storage.blob import BlobServiceClient
 from azure.ai.vision.imageanalysis import ImageAnalysisClient
@@ -16,76 +18,83 @@ app = func.FunctionApp()
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     logging.info('Canteen Bot: Starting intelligent scan...')
 
-    # Configuration
-    apify_token = os.environ.get("APIFY_API_TOKEN")
+    # 1. Setup Storage Client
     storage_connection = os.environ.get("AzureWebJobsStorage")
+    blob_service_client = BlobServiceClient.from_connection_string(
+        storage_connection)
+    container_name = "canteen-menus"
+
+    # 2. COOLDOWN CHECK: Check if we successfully found a menu recently
+    cooldown_blob = blob_service_client.get_blob_client(
+        container=container_name, blob="last_success.txt")
+
+    if cooldown_blob.exists():
+        last_date_str = cooldown_blob.download_blob().readall().decode('utf-8')
+        last_date = datetime.strptime(last_date_str, '%Y-%m-%d')
+
+        if datetime.now() < last_date + timedelta(days=3):
+            logging.info(
+                f"Cooldown active. Last menu found on {last_date_str}. See you in a few days!")
+            return
+
+    # 3. Configuration & Scraper
+    apify_token = os.environ.get("APIFY_API_TOKEN")
     vision_key = os.environ.get("VISION_KEY")
     vision_endpoint = os.environ.get("VISION_ENDPOINT")
 
-    # 1. Start Apify Scraper
-    # 1. Start Apify Scraper with strict limits
     client = ApifyClient(apify_token)
     run_input = {
         "startUrls": [{"url": "https://www.facebook.com/VIAKantinenHorsens"}],
-        "resultsLimit": 5,  # Hard limit on returned items
-        "onlyPostsAfter": "2026-04-01",  # Optional: Only look at this month
-        "scrapeSelectedIds": False
-    }
+        "resultsLimit": 5}
 
-    logging.info("Running Apify scraper with a limit of 5 photos...")
-    # Using the 'actor' call but ensuring we target the latest photos
+    logging.info("Running Scraper...")
     run = client.actor("crawlerbros/facebook-photos-scraper").call(
         run_input=run_input)
     items = client.dataset(run["defaultDatasetId"]).list_items().items
 
-    # 2. Setup Azure AI Vision Client
     cv_client = ImageAnalysisClient(endpoint=vision_endpoint,
                                     credential=AzureKeyCredential(vision_key))
 
     for item in items:
         image_url = item.get("imageUrl")
-        item_id = item.get("id") or item.get("image_url_hash") or "latest"
+        if not image_url: continue
 
-        logging.info(f"Analyzing image: {image_url}")
-
-        # 3. Ask Azure AI to read the text (OCR)
-        result = cv_client.analyze_from_url(
-            image_url=image_url,
-            visual_features=[VisualFeatures.READ]
-        )
-
-        # Extract all text found in the image
+        # 4. OCR Analysis
+        result = cv_client.analyze_from_url(image_url=image_url,
+                                            visual_features=[
+                                                VisualFeatures.READ])
         extracted_text = ""
-        if result.read is not None:
+        if result.read is not None and len(result.read.blocks) > 0:
             for line in result.read.blocks[0].lines:
                 extracted_text += line.text + " "
 
         extracted_text = extracted_text.lower()
-        logging.info(
-            f"OCR found text: {extracted_text[:100]}...")  # Log first 100 chars
 
-        # 4. Check for keywords (Menu detection)
-        keywords = ["menu", "mandag", "tirsdag", "onsdag", "torsdag", "fredag",
-                    "uge"]
-        if any(word in extracted_text for word in keywords):
-            logging.info("Bingo! This image contains a menu.")
+        # 5. Filter for Menu + Week Number
+        if "menu" in extracted_text and "uge" in extracted_text:
+            week_match = re.search(r'uge\s*(\d+)', extracted_text)
+            if not week_match: continue
 
-            # 5. Upload to Storage
-            blob_name = f"menu_{item_id}.jpg"
-            blob_service_client = BlobServiceClient.from_connection_string(
-                storage_connection)
-            blob_client = blob_service_client.get_blob_client(
-                container="canteen-menus", blob=blob_name)
+            week_number = week_match.group(1)
+            blob_name = f"menu_week{week_number}.jpg"
+            menu_blob = blob_service_client.get_blob_client(
+                container=container_name, blob=blob_name)
 
-            if not blob_client.exists():
+            if not menu_blob.exists():
+                logging.info(f"New menu found for Week {week_number}!")
+
+                # Upload the image
                 image_data = requests.get(image_url).content
-                blob_client.upload_blob(image_data)
-                logging.info(f"New menu saved to cloud: {blob_name}")
+                menu_blob.upload_blob(image_data)
 
-                # TODO: Send to Slack here!
-                break  # We found the menu, no need to check the other 4 posts
-            else:
-                logging.info("Menu already exists in storage. Skipping.")
+                # UPDATE COOLDOWN: Save today's date to the cloud
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                cooldown_blob.upload_blob(today_str, overwrite=True)
+
+                logging.info(
+                    f"Saved Week {week_number} and set cooldown to {today_str}.")
+                # Slack integration will trigger here
                 break
-        else:
-            logging.info("Image did not look like a menu. Checking next...")
+            else:
+                logging.info(f"Week {week_number} already in storage.")
+                break
