@@ -23,12 +23,17 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     vision_endpoint = os.environ.get("VISION_ENDPOINT")
 
     # 1. Start Apify Scraper
+    # 1. Start Apify Scraper with strict limits
     client = ApifyClient(apify_token)
     run_input = {
         "startUrls": [{"url": "https://www.facebook.com/VIAKantinenHorsens"}],
-        "maxResults": 5
+        "resultsLimit": 5,  # Hard limit on returned items
+        "onlyPostsAfter": "2026-04-01",  # Optional: Only look at this month
+        "scrapeSelectedIds": False
     }
 
+    logging.info("Running Apify scraper with a limit of 5 photos...")
+    # Using the 'actor' call but ensuring we target the latest photos
     run = client.actor("crawlerbros/facebook-photos-scraper").call(
         run_input=run_input)
     items = client.dataset(run["defaultDatasetId"]).list_items().items
@@ -39,7 +44,7 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
 
     for item in items:
         image_url = item.get("imageUrl")
-        item_id = item.get("id")
+        item_id = item.get("id") or item.get("image_url_hash") or "latest"
 
         logging.info(f"Analyzing image: {image_url}")
 
