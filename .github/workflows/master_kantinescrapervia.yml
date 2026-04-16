@@ -77,5 +77,5 @@ jobs:
       - name: Restart Azure Function App via Kudu
         run: |
           curl -X POST "https://kantinescrapervia.scm.azurewebsites.net/api/restart" \
-            --user "${{ secrets.KUDU_USERNAME }}:${{ secrets.KUDU_PASSWORD }}" \
+            --user '${{ secrets.KUDU_USERNAME }}:${{ secrets.KUDU_PASSWORD }}' \
             --fail
