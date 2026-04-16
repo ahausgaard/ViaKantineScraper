@@ -9,7 +9,7 @@ from canteen.menu_parser import parse_week_number
 app = func.FunctionApp()
 
 
-@app.timer_trigger(schedule="0 0 9 * * 1-5", arg_name="myTimer",
+@app.timer_trigger(schedule="0 0 9 * * 1-6", arg_name="myTimer",
                    run_on_startup=False, use_monitor=False)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     logging.info("Canteen Bot: Starting intelligent scan...")
@@ -32,8 +32,8 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
 
         logging.info(f"New menu found for Week {week_number}!")
         storage.save_menu(week_number, image_url)
-        today = storage.update_cooldown()
-        logging.info(f"Saved Week {week_number} and set cooldown to {today}.")
+        today = storage.update_cooldown(week_number)
+        logging.info(f"Saved Week {week_number} and set cooldown until Friday {today}.")
         # Slack integration will trigger here
         break
 

@@ -1,13 +1,21 @@
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from azure.storage.blob import BlobServiceClient
 
 from canteen import config
 
 CONTAINER_NAME = "canteen-menus"
 COOLDOWN_BLOB = "last_success.txt"
-COOLDOWN_DAYS = 3
+
+
+def _friday_of_week(week_number: int, year: int | None = None) -> datetime:
+    """Return end-of-day Friday of the given ISO week number."""
+    if year is None:
+        year = datetime.now().isocalendar()[0]
+    return datetime.fromisocalendar(year, week_number, 5).replace(
+        hour=23, minute=59, second=59
+    )
 
 
 class StorageClient:
@@ -25,19 +33,21 @@ class StorageClient:
         if not blob.exists():
             return False
 
-        last_date_str = blob.download_blob().readall().decode("utf-8")
-        last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+        cooldown_str = blob.download_blob().readall().decode("utf-8")
+        cooldown_until = datetime.strptime(cooldown_str, "%Y-%m-%d")
 
-        if datetime.now() < last_date + timedelta(days=COOLDOWN_DAYS):
-            logging.info(f"Cooldown active. Last menu found on {last_date_str}. See you in a few days!")
+        if datetime.now() < cooldown_until:
+            logging.info(f"Cooldown active until {cooldown_str} (Friday of last found week).")
             return True
 
         return False
 
-    def update_cooldown(self) -> str:
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        self._blob(COOLDOWN_BLOB).upload_blob(today_str, overwrite=True)
-        return today_str
+    def update_cooldown(self, week_number: str) -> str:
+        """Set cooldown to the Friday of the given menu week."""
+        friday = _friday_of_week(int(week_number))
+        friday_str = friday.strftime("%Y-%m-%d")
+        self._blob(COOLDOWN_BLOB).upload_blob(friday_str, overwrite=True)
+        return friday_str
 
     # --- Menu blobs ---
 
