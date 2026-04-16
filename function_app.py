@@ -17,6 +17,13 @@ app = func.FunctionApp()
 
 
 
+@app.timer_trigger(schedule="0 */4 * * * *", arg_name="warmTimer",
+                   run_on_startup=False, use_monitor=False)
+def keep_warm(warmTimer: func.TimerRequest) -> None:
+    """Fires every 4 minutes to prevent cold starts on the consumption plan."""
+    logging.info("Keep-warm ping.")
+
+
 @app.timer_trigger(schedule="0 0 9 * * 1-6", arg_name="myTimer",
                    run_on_startup=True, use_monitor=False)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
