@@ -1,7 +1,7 @@
 import logging
 import requests
-from datetime import datetime
-from azure.storage.blob import BlobServiceClient
+from datetime import datetime, timedelta, timezone
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 
 from canteen import config
 
@@ -57,4 +57,35 @@ class StorageClient:
     def save_menu(self, week_number: str, image_url: str) -> None:
         image_data = requests.get(image_url).content
         self._blob(f"menu_week{week_number}.jpg").upload_blob(image_data)
+
+    def get_latest_menu_sas_url(self, lookback_weeks: int = 4) -> tuple[str, str] | None:
+        """Find the most recent stored menu and return (week_number, sas_url), or None."""
+        iso = datetime.now().isocalendar()
+        current_week, current_year = iso[1], iso[0]
+
+        for offset in range(lookback_weeks):
+            week = current_week - offset
+            year = current_year
+            if week < 1:
+                week += 52
+                year -= 1
+
+            blob_name = f"menu_week{week}.jpg"
+            if not self._blob(blob_name).exists():
+                continue
+
+            account = self._client.account_name
+            account_key = self._client.credential.account_key
+            sas = generate_blob_sas(
+                account_name=account,
+                container_name=CONTAINER_NAME,
+                blob_name=blob_name,
+                account_key=account_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+            )
+            url = f"https://{account}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas}"
+            return str(week), url
+
+        return None
 
