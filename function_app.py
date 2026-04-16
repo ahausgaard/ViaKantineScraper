@@ -13,6 +13,7 @@ from canteen import slack
 app = func.FunctionApp()
 
 
+
 @app.timer_trigger(schedule="0 0 9 * * 1-6", arg_name="myTimer",
                    run_on_startup=True, use_monitor=False)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
