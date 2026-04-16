@@ -74,8 +74,4 @@ jobs:
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_38EAFD22838A4C2A8A7F030E83F966FF }}
 
-      - name: Restart Azure Function App via Kudu
-        run: |
-          curl -X POST "https://kantinescrapervia.scm.azurewebsites.net/api/restart" \
-            --user '${{ secrets.KUDU_USERNAME }}:${{ secrets.KUDU_PASSWORD }}' \
-            --fail
+
