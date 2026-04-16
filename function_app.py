@@ -61,3 +61,4 @@ def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
 
+
