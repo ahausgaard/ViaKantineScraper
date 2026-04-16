@@ -18,6 +18,10 @@ def _friday_of_week(week_number: int, year: int | None = None) -> datetime:
     )
 
 
+def _blob_name(week_number: int | str, year: int | str) -> str:
+    return f"menu_week{week_number}_year{year}.jpg"
+
+
 class StorageClient:
     def __init__(self):
         connection_string = config.get("AzureWebJobsStorage")
@@ -25,6 +29,19 @@ class StorageClient:
 
     def _blob(self, name: str):
         return self._client.get_blob_client(container=CONTAINER_NAME, blob=name)
+
+    def _make_sas_url(self, blob_name: str) -> str:
+        account = self._client.account_name
+        account_key = self._client.credential.account_key
+        sas = generate_blob_sas(
+            account_name=account,
+            container_name=CONTAINER_NAME,
+            blob_name=blob_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        return f"https://{account}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas}"
 
     # --- Cooldown ---
 
@@ -52,11 +69,20 @@ class StorageClient:
     # --- Menu blobs ---
 
     def menu_exists(self, week_number: str) -> bool:
-        return self._blob(f"menu_week{week_number}.jpg").exists()
+        year = datetime.now().isocalendar()[0]
+        return self._blob(_blob_name(week_number, year)).exists()
 
     def save_menu(self, week_number: str, image_url: str) -> None:
+        year = datetime.now().isocalendar()[0]
         image_data = requests.get(image_url).content
-        self._blob(f"menu_week{week_number}.jpg").upload_blob(image_data)
+        self._blob(_blob_name(week_number, year)).upload_blob(image_data)
+
+    def get_menu_for_week(self, week_number: int, year: int) -> tuple[str, str] | None:
+        """Return (week_number, sas_url) for a specific week/year, or None if not stored."""
+        name = _blob_name(week_number, year)
+        if not self._blob(name).exists():
+            return None
+        return str(week_number), self._make_sas_url(name)
 
     def get_latest_menu_sas_url(self, lookback_weeks: int = 4) -> tuple[str, str] | None:
         """Find the most recent stored menu and return (week_number, sas_url), or None."""
@@ -70,22 +96,10 @@ class StorageClient:
                 week += 52
                 year -= 1
 
-            blob_name = f"menu_week{week}.jpg"
-            if not self._blob(blob_name).exists():
+            name = _blob_name(week, year)
+            if not self._blob(name).exists():
                 continue
 
-            account = self._client.account_name
-            account_key = self._client.credential.account_key
-            sas = generate_blob_sas(
-                account_name=account,
-                container_name=CONTAINER_NAME,
-                blob_name=blob_name,
-                account_key=account_key,
-                permission=BlobSasPermissions(read=True),
-                expiry=datetime.now(timezone.utc) + timedelta(hours=1),
-            )
-            url = f"https://{account}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas}"
-            return str(week), url
+            return str(week), self._make_sas_url(name)
 
         return None
-
