@@ -65,13 +65,12 @@ def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
 
     logging.info(f"slack_menu_command: timestamp='{timestamp}', sig_present={bool(signature)}, body_len={len(body)}")
 
-    if not slack.verify_slack_signature(timestamp, body, signature):
-        logging.warning("slack_menu_command: signature verification FAILED — returning 401")
-        return func.HttpResponse("Unauthorized", status_code=401)
+    try:
+        if not slack.verify_slack_signature(timestamp, body, signature):
+            logging.warning("slack_menu_command: signature verification FAILED — returning 401")
+            return func.HttpResponse("Unauthorized", status_code=401)
 
-    logging.info("slack_menu_command: signature OK")
-
-    params = parse_qs(body)
+        logging.info("slack_menu_command: signature OK")
     command_text = params.get("text", [""])[0].strip()
     logging.info(f"slack_menu_command: command_text='{command_text}'")
 
