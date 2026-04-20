@@ -1,11 +1,8 @@
 import azure.functions as func
 import json
 import logging
-import threading
 from urllib.parse import parse_qs
 from datetime import datetime
-
-import requests as http_requests
 
 from canteen.storage import StorageClient
 from canteen.scraper import fetch_image_urls
@@ -15,13 +12,6 @@ from canteen import slack
 
 app = func.FunctionApp()
 
-
-
-@app.timer_trigger(schedule="0 */4 * * * *", arg_name="warmTimer",
-                   run_on_startup=False, use_monitor=False)
-def keep_warm(warmTimer: func.TimerRequest) -> None:
-    """Fires every 4 minutes to prevent cold starts on the consumption plan."""
-    logging.info("Keep-warm ping.")
 
 
 @app.timer_trigger(schedule="0 0 9 * * 1-6", arg_name="myTimer",
@@ -70,43 +60,33 @@ def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
 
     params = parse_qs(body)
     command_text = params.get("text", [""])[0].strip()
-    response_url = params.get("response_url", [""])[0]
 
-    # Respond immediately to satisfy Slack's 3-second timeout,
-    # then do the actual work in a background thread.
-    def respond():
-        storage = StorageClient()
+    storage = StorageClient()
 
-        if command_text:
-            parts = command_text.split()
-            try:
-                week = int(parts[0])
-                year = int(parts[1]) if len(parts) > 1 else datetime.now().isocalendar()[0]
-            except ValueError:
-                payload = slack.ephemeral_error_response(
-                    "Invalid format. Use `/menu`, `/menu 15`, or `/menu 15 2025`."
-                )
-                http_requests.post(response_url, json=payload)
-                return
+    if command_text:
+        parts = command_text.split()
+        try:
+            week = int(parts[0])
+            year = int(parts[1]) if len(parts) > 1 else datetime.now().isocalendar()[0]
+        except ValueError:
+            payload = slack.ephemeral_error_response(
+                "Invalid format. Use `/menu`, `/menu 15`, or `/menu 15 2025`."
+            )
+            return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
-            result = storage.get_menu_for_week(week, year)
-            if result is None:
-                payload = slack.ephemeral_error_response(f"No menu found for week {week}, {year}. 🤷")
-            else:
-                week_number, image_url = result
-                payload = slack.ephemeral_menu_response(image_url, week_number)
+        result = storage.get_menu_for_week(week, year)
+        if result is None:
+            payload = slack.ephemeral_error_response(f"No menu found for week {week}, {year}. 🤷")
         else:
-            result = storage.get_latest_menu_sas_url()
-            if result is None:
-                payload = slack.ephemeral_error_response("No menu available yet. Check back later! 🥲")
-            else:
-                week_number, image_url = result
-                payload = slack.ephemeral_menu_response(image_url, week_number)
+            week_number, image_url = result
+            payload = slack.ephemeral_menu_response(image_url, week_number)
+    else:
+        result = storage.get_latest_menu_sas_url()
+        if result is None:
+            payload = slack.ephemeral_error_response("No menu available yet. Check back later! 🥲")
+        else:
+            week_number, image_url = result
+            payload = slack.ephemeral_menu_response(image_url, week_number)
 
-        http_requests.post(response_url, json=payload)
-
-    threading.Thread(target=respond).start()
-
-    # Acknowledge immediately — Slack requires a response within 3 seconds
-    return func.HttpResponse("", status_code=200)
+    return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
