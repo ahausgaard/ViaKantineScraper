@@ -48,51 +48,72 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
         break
 
 
+@app.route(route="health", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+def health(req: func.HttpRequest) -> func.HttpResponse:
+    """Simple health check — open in a browser to confirm the function is running."""
+    return func.HttpResponse("OK - canteen bot is alive", status_code=200)
+
+
 @app.route(route="menu", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
-    """Handle the /menu Slack slash command — responds ephemerally with the latest menu image.
+    """Handle the /menu Slack slash command — responds ephemerally with the latest menu image."""
+    logging.info("slack_menu_command: received request")
 
-    Usage:
-      /menu          → latest menu
-      /menu 15       → week 15 of current year
-      /menu 15 2025  → week 15 of 2025
-    """
     timestamp = req.headers.get("X-Slack-Request-Timestamp", "")
     signature = req.headers.get("X-Slack-Signature", "")
     body = req.get_body().decode("utf-8")
 
+    logging.info(f"slack_menu_command: timestamp='{timestamp}', sig_present={bool(signature)}, body_len={len(body)}")
+
     if not slack.verify_slack_signature(timestamp, body, signature):
+        logging.warning("slack_menu_command: signature verification FAILED — returning 401")
         return func.HttpResponse("Unauthorized", status_code=401)
+
+    logging.info("slack_menu_command: signature OK")
 
     params = parse_qs(body)
     command_text = params.get("text", [""])[0].strip()
+    logging.info(f"slack_menu_command: command_text='{command_text}'")
 
-    storage = StorageClient()
+    try:
+        storage = StorageClient()
 
-    if command_text:
-        parts = command_text.split()
-        try:
-            week = int(parts[0])
-            year = int(parts[1]) if len(parts) > 1 else datetime.now().isocalendar()[0]
-        except ValueError:
-            payload = slack.ephemeral_error_response(
-                "Invalid format. Use `/menu`, `/menu 15`, or `/menu 15 2025`."
-            )
-            return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
+        if command_text:
+            parts = command_text.split()
+            try:
+                week = int(parts[0])
+                year = int(parts[1]) if len(parts) > 1 else datetime.now().isocalendar()[0]
+            except ValueError:
+                payload = slack.ephemeral_error_response(
+                    "Invalid format. Use `/menu`, `/menu 15`, or `/menu 15 2025`."
+                )
+                return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
-        result = storage.get_menu_for_week(week, year)
-        if result is None:
-            payload = slack.ephemeral_error_response(f"No menu found for week {week}, {year}. 🤷")
+            logging.info(f"slack_menu_command: looking up week={week}, year={year}")
+            result = storage.get_menu_for_week(week, year)
+            if result is None:
+                logging.info("slack_menu_command: no menu found for that week")
+                payload = slack.ephemeral_error_response(f"No menu found for week {week}, {year}. 🤷")
+            else:
+                week_number, image_url = result
+                logging.info(f"slack_menu_command: found menu for week {week_number}")
+                payload = slack.ephemeral_menu_response(image_url, week_number)
         else:
-            week_number, image_url = result
-            payload = slack.ephemeral_menu_response(image_url, week_number)
-    else:
-        result = storage.get_latest_menu_sas_url()
-        if result is None:
-            payload = slack.ephemeral_error_response("No menu available yet. Check back later! 🥲")
-        else:
-            week_number, image_url = result
-            payload = slack.ephemeral_menu_response(image_url, week_number)
+            logging.info("slack_menu_command: looking up latest menu")
+            result = storage.get_latest_menu_sas_url()
+            if result is None:
+                logging.info("slack_menu_command: no menu in storage")
+                payload = slack.ephemeral_error_response("No menu available yet. Check back later! 🥲")
+            else:
+                week_number, image_url = result
+                logging.info(f"slack_menu_command: returning week {week_number}")
+                payload = slack.ephemeral_menu_response(image_url, week_number)
 
-    return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
+        logging.info("slack_menu_command: returning 200 with payload")
+        return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
+
+    except Exception as e:
+        logging.exception(f"slack_menu_command: unhandled exception: {e}")
+        payload = slack.ephemeral_error_response("Something went wrong on the server. Check the logs. 🔧")
+        return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
