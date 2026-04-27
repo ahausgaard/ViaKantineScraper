@@ -14,8 +14,6 @@ from canteen import slack
 app = func.FunctionApp()
 
 DENMARK_TZ = ZoneInfo("Europe/Copenhagen")
-SCRAPE_WINDOW_START_HOUR = 9
-SCRAPE_WINDOW_END_HOUR = 12
 
 
 @app.timer_trigger(schedule="0 */4 * * * *", arg_name="warmTimer",
@@ -25,7 +23,9 @@ def keep_warm(warmTimer: func.TimerRequest) -> None:
     logging.info("Keep-warm ping.")
 
 
-@app.timer_trigger(schedule="0 */15 * * * *", arg_name="myTimer",
+# Fires at 06:00 and 11:00 local Denmark time on weekdays (Mon–Fri).
+# Requires WEBSITE_TIME_ZONE=W. Europe Standard Time in Azure App Settings.
+@app.timer_trigger(schedule="0 0 6,11 * * 1-5", arg_name="myTimer",
                    run_on_startup=False, use_monitor=True)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     now_local = datetime.now(DENMARK_TZ)
@@ -33,14 +33,6 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     if myTimer.past_due:
         logging.warning("Canteen Bot: timer trigger is running past due.")
 
-    if not (SCRAPE_WINDOW_START_HOUR <= now_local.hour < SCRAPE_WINDOW_END_HOUR):
-        logging.info(
-            "Canteen Bot: skipping scan outside local scrape window (%s:00-%s:00). Now=%s",
-            SCRAPE_WINDOW_START_HOUR,
-            SCRAPE_WINDOW_END_HOUR,
-            now_local.isoformat(),
-        )
-        return
 
     logging.info("Canteen Bot: Starting intelligent scan at %s", now_local.isoformat())
 
