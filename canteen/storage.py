@@ -18,6 +18,8 @@ def _friday_of_week(week_number: int, year: int | None = None) -> datetime:
     )
 
 
+
+
 def _blob_name(week_number: int | str, year: int | str) -> str:
     return f"menu_week{week_number}_year{year}.jpg"
 
@@ -51,7 +53,11 @@ class StorageClient:
             return False
 
         cooldown_str = blob.download_blob().readall().decode("utf-8")
-        cooldown_until = datetime.strptime(cooldown_str, "%Y-%m-%d")
+        # Support both old (date-only) and new (datetime) formats
+        try:
+            cooldown_until = datetime.strptime(cooldown_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            cooldown_until = datetime.strptime(cooldown_str, "%Y-%m-%d")
 
         if datetime.now() < cooldown_until:
             logging.info(f"Cooldown active until {cooldown_str} (Friday of last found week).")
@@ -60,11 +66,11 @@ class StorageClient:
         return False
 
     def update_cooldown(self, week_number: str) -> str:
-        """Set cooldown to the Friday of the given menu week."""
+        """Set cooldown to end-of-day Friday of the given menu week."""
         friday = _friday_of_week(int(week_number))
-        friday_str = friday.strftime("%Y-%m-%d")
+        friday_str = friday.strftime("%Y-%m-%d %H:%M:%S")
         self._blob(COOLDOWN_BLOB).upload_blob(friday_str, overwrite=True)
-        return friday_str
+        return friday.strftime("%Y-%m-%d")
 
     # --- Menu blobs ---
 

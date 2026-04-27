@@ -3,6 +3,7 @@ import json
 import logging
 from urllib.parse import parse_qs
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from canteen.storage import StorageClient
 from canteen.scraper import fetch_image_urls
@@ -12,6 +13,10 @@ from canteen import slack
 
 app = func.FunctionApp()
 
+DENMARK_TZ = ZoneInfo("Europe/Copenhagen")
+SCRAPE_WINDOW_START_HOUR = 9
+SCRAPE_WINDOW_END_HOUR = 12
+
 
 @app.timer_trigger(schedule="0 */4 * * * *", arg_name="warmTimer",
                    run_on_startup=False, use_monitor=False)
@@ -20,14 +25,29 @@ def keep_warm(warmTimer: func.TimerRequest) -> None:
     logging.info("Keep-warm ping.")
 
 
-@app.timer_trigger(schedule="0 0 8 * * 0-6", arg_name="myTimer",
-                   run_on_startup=True, use_monitor=False)
+@app.timer_trigger(schedule="0 */15 * * * *", arg_name="myTimer",
+                   run_on_startup=False, use_monitor=True)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
-    logging.info("Canteen Bot: Starting intelligent scan...")
+    now_local = datetime.now(DENMARK_TZ)
+
+    if myTimer.past_due:
+        logging.warning("Canteen Bot: timer trigger is running past due.")
+
+    if not (SCRAPE_WINDOW_START_HOUR <= now_local.hour < SCRAPE_WINDOW_END_HOUR):
+        logging.info(
+            "Canteen Bot: skipping scan outside local scrape window (%s:00-%s:00). Now=%s",
+            SCRAPE_WINDOW_START_HOUR,
+            SCRAPE_WINDOW_END_HOUR,
+            now_local.isoformat(),
+        )
+        return
+
+    logging.info("Canteen Bot: Starting intelligent scan at %s", now_local.isoformat())
 
     storage = StorageClient()
 
     if storage.is_on_cooldown():
+        logging.info("Canteen Bot: skipping because cooldown is active.")
         return
 
     for image_url in fetch_image_urls():
