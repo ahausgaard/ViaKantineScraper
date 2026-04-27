@@ -20,7 +20,7 @@ def keep_warm(warmTimer: func.TimerRequest) -> None:
     logging.info("Keep-warm ping.")
 
 
-@app.timer_trigger(schedule="0 0 9 * * 0-6", arg_name="myTimer",
+@app.timer_trigger(schedule="0 0 8 * * 0-6", arg_name="myTimer",
                    run_on_startup=True, use_monitor=False)
 def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     logging.info("Canteen Bot: Starting intelligent scan...")
