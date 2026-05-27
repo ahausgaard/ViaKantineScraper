@@ -41,7 +41,7 @@ class StorageClient:
             blob_name=blob_name,
             account_key=account_key,
             permission=BlobSasPermissions(read=True),
-            expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+            expiry=datetime.now(timezone.utc) + timedelta(days=365),
         )
         return f"https://{account}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas}"
 
