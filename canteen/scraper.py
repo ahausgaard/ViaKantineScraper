@@ -18,7 +18,7 @@ def fetch_image_urls() -> list[str]:
 
     logging.info("Running Scraper...")
     run = client.actor(ACTOR_ID).call(run_input=run_input)
-    items = client.dataset(run["defaultDatasetId"]).list_items().items
+    items = client.dataset(run.default_dataset_id).list_items().items
 
     return [item["imageUrl"] for item in items if item.get("imageUrl")]
 
