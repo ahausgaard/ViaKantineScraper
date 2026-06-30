@@ -48,6 +48,27 @@ def ephemeral_menu_response(image_url: str, week_number: str) -> dict:
     }
 
 
+def ephemeral_holiday_response(image_url: str, holiday_name: str, emoji: str = "") -> dict:
+    """Build a Slack ephemeral response shown while the canteen is closed for a holiday."""
+    return {
+        "response_type": "ephemeral",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{holiday_name}* — the canteen is closed. {emoji}".strip(),
+                },
+            },
+            {
+                "type": "image",
+                "image_url": image_url,
+                "alt_text": holiday_name,
+            },
+        ],
+    }
+
+
 def ephemeral_error_response(message: str) -> dict:
     return {"response_type": "ephemeral", "text": message}
 

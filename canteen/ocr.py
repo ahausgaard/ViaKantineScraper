@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from azure.ai.vision.imageanalysis import ImageAnalysisClient
 from azure.ai.vision.imageanalysis.models import VisualFeatures
 from azure.core.credentials import AzureKeyCredential
@@ -27,3 +29,34 @@ def extract_text(image_url: str) -> str:
 
     return " ".join(lines).lower()
 
+
+def extract_lines_with_coords(image_url: str) -> list[dict]:
+    """Run OCR on an image URL and return each line with its bounding-box centre.
+
+    Returns a list of dicts:
+        {"text": str, "x": float, "y": float}
+    where x/y are the centre pixel coordinates of the line's bounding polygon.
+    Original casing is preserved.
+    """
+    client = _make_client()
+    result = client.analyze_from_url(
+        image_url=image_url,
+        visual_features=[VisualFeatures.READ],
+    )
+
+    lines: list[dict] = []
+    if result.read is None or not result.read.blocks:
+        return lines
+
+    for block in result.read.blocks:
+        for line in block.lines:
+            polygon = line.bounding_polygon  # list of {x, y} points
+            if not polygon:
+                continue
+            xs = [pt["x"] for pt in polygon]
+            ys = [pt["y"] for pt in polygon]
+            cx = (min(xs) + max(xs)) / 2
+            cy = (min(ys) + max(ys)) / 2
+            lines.append({"text": line.text, "x": cx, "y": cy})
+
+    return lines
