@@ -9,7 +9,7 @@ from canteen.storage import StorageClient
 from canteen.scraper import fetch_image_urls
 from canteen.ocr import extract_text
 from canteen.menu_parser import parse_week_number
-from canteen import slack
+from canteen import holidays, slack
 
 app = func.FunctionApp()
 
@@ -38,6 +38,11 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
         return
 
     logging.info("Canteen Bot: Starting intelligent scan at %s", now_local.isoformat())
+
+    holiday = holidays.active_holiday(now_local.date())
+    if holiday is not None:
+        logging.info("Canteen Bot: skipping scrape during %s.", holiday.name)
+        return
 
     storage = StorageClient()
 
@@ -120,6 +125,17 @@ def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
                 logging.info(f"slack_menu_command: found menu for week {week_number}")
                 payload = slack.ephemeral_menu_response(image_url, week_number)
         else:
+            holiday = holidays.active_holiday(datetime.now(DENMARK_TZ).date())
+            if holiday is not None:
+                logging.info(f"slack_menu_command: {holiday.name} active — returning holiday response")
+                image_url = (
+                    storage.get_holiday_image_url(holiday.image_filename)
+                    if holiday.image_filename
+                    else None
+                )
+                payload = slack.ephemeral_holiday_response(holiday.name, image_url, holiday.emoji)
+                return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
+
             logging.info("slack_menu_command: looking up latest menu")
             result = storage.get_latest_menu_sas_url()
             if result is None:

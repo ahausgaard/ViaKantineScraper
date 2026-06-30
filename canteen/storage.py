@@ -1,4 +1,5 @@
 import logging
+import os
 import requests
 from datetime import datetime, timedelta, timezone
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
@@ -7,6 +8,7 @@ from canteen import config
 
 CONTAINER_NAME = "canteen-menus"
 COOLDOWN_BLOB = "last_success.txt"
+_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 
 
 def _friday_of_week(week_number: int, year: int | None = None) -> datetime:
@@ -82,6 +84,20 @@ class StorageClient:
         year = datetime.now().isocalendar()[0]
         image_data = requests.get(image_url).content
         self._blob(_blob_name(week_number, year)).upload_blob(image_data)
+
+    def get_holiday_image_url(self, image_filename: str) -> str:
+        """Upload the bundled holiday image (if not already present) and return a SAS URL.
+
+        The image lives in canteen/images/ and is copied to blob storage so Slack
+        can render it the same way it renders menu images.
+        """
+        blob_name = f"holiday_{image_filename}"
+        blob = self._blob(blob_name)
+        if not blob.exists():
+            local_path = os.path.join(_IMAGES_DIR, image_filename)
+            with open(local_path, "rb") as f:
+                blob.upload_blob(f, overwrite=True)
+        return self._make_sas_url(blob_name)
 
     def get_menu_for_week(self, week_number: int, year: int) -> tuple[str, str] | None:
         """Return (week_number, sas_url) for a specific week/year, or None if not stored."""
