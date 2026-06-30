@@ -33,10 +33,6 @@ def check_canteen_menu(myTimer: func.TimerRequest) -> None:
     if myTimer.past_due:
         logging.warning("Canteen Bot: timer trigger is running past due.")
 
-    if now_local.month == 7:
-        logging.info("Canteen Bot: skipping — canteen is closed in July.")
-        return
-
     logging.info("Canteen Bot: Starting intelligent scan at %s", now_local.isoformat())
 
     holiday = holidays.active_holiday(now_local.date())
