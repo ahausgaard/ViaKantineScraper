@@ -124,9 +124,13 @@ def slack_menu_command(req: func.HttpRequest) -> func.HttpResponse:
         else:
             holiday = holidays.active_holiday(datetime.now(DENMARK_TZ).date())
             if holiday is not None:
-                logging.info(f"slack_menu_command: {holiday.name} active — returning holiday image")
-                image_url = storage.get_holiday_image_url(holiday.image_filename)
-                payload = slack.ephemeral_holiday_response(image_url, holiday.name, holiday.emoji)
+                logging.info(f"slack_menu_command: {holiday.name} active — returning holiday response")
+                image_url = (
+                    storage.get_holiday_image_url(holiday.image_filename)
+                    if holiday.image_filename
+                    else None
+                )
+                payload = slack.ephemeral_holiday_response(holiday.name, image_url, holiday.emoji)
                 return func.HttpResponse(json.dumps(payload), mimetype="application/json", status_code=200)
 
             logging.info("slack_menu_command: looking up latest menu")
