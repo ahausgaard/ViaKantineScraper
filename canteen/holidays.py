@@ -34,6 +34,13 @@ HOLIDAYS: list[Holiday] = [
         end_week=31,
         emoji="🌴",
     ),
+    Holiday(
+        name="Autumn Break",
+        image_filename="autumnRye.jpg",
+        start_week=42,
+        end_week=42,
+        emoji="🍂"
+    ),
 ]
 
 
