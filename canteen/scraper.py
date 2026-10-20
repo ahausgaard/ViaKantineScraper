@@ -4,7 +4,7 @@ from apify_client import ApifyClient
 from canteen import config
 
 FACEBOOK_URL = "https://www.facebook.com/VIAKantinenHorsens"
-ACTOR_ID = "crawlerbros/facebook-photos-scraper"
+ACTOR_ID = "apify/facebook-photos-scraper"
 RESULTS_LIMIT = 5
 
 
@@ -20,5 +20,5 @@ def fetch_image_urls() -> list[str]:
     run = client.actor(ACTOR_ID).call(run_input=run_input)
     items = client.dataset(run.default_dataset_id).list_items().items
 
-    return [item["imageUrl"] for item in items if item.get("imageUrl")]
+    return [item["image"] for item in items if item.get("image")]
 
