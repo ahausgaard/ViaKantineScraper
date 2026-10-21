@@ -77,12 +77,6 @@ HOLIDAYS: list[Holiday] = [
         end_week=52,
         emoji="🎅"
     ),
-    Holiday(
-        name="Winter Break",
-        image_filename="winterRye.jpg",
-        start_week=7,
-        emoji="❄️"
-    ),
 ]
 
 
