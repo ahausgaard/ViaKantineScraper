@@ -3,8 +3,12 @@
 # azure-monitor-opentelemetry 
 
 azure-functions
-apify-client
+# Minimums fix the eMudhra/emSign CA compromise (Oct 2026): apify-client 3.4.0
+# pulls impit 0.15.1 (rustls-webpki 0.103.16, webpki-root-certs 1.0.10).
+apify-client>=3.4.0
+impit>=0.15.1
 requests
+certifi>=2026.10.19
 azure-storage-blob
 azure-ai-vision-imageanalysis
 
